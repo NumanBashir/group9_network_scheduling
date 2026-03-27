@@ -6,3 +6,32 @@ python3 -m group9_network_scheduling summarize tsn-test-cases-main/examples/test
 
 python3 -m group9_network_scheduling summarize tsn-test-cases-main/examples/test_case_1 --json
 
+# Run test suite
+python3 -m unittest discover -s group9_network_scheduling/tests -v
+
+# Local copied cases
+python3 -m group9_network_scheduling list-cases
+
+# Summarize a local case
+python3 -m group9_network_scheduling summarize group9_network_scheduling/test_cases/test_case_1
+python3 -m group9_network_scheduling summarize group9_network_scheduling/test_cases/test_case_1 --json
+
+# Run the analytical CBS bound:
+python3 -m group9_network_scheduling analyze group9_network_scheduling/test_cases/test_case_1
+python3 -m group9_network_scheduling analyze group9_network_scheduling/test_cases/test_case_1 --json
+
+# Run the simulator:
+python3 -m group9_network_scheduling simulate group9_network_scheduling/test_cases/test_case_1 --cycles 5
+python3 -m group9_network_scheduling simulate group9_network_scheduling/test_cases/test_case_1 --cycles 5 --json
+
+# Run full comparison:
+python3 -m group9_network_scheduling compare group9_network_scheduling/test_cases/test_case_1 --cycles 5
+python3 -m group9_network_scheduling compare group9_network_scheduling/test_cases/test_case_1 --cycles 5 --json
+
+# Import fresh generated cases
+python3 -m group9_network_scheduling import-cases tsn-test-cases-main/test_cases
+
+# Verify here
+python3 -m unittest discover -s group9_network_scheduling/tests -v
+python3 -m group9_network_scheduling compare tsn-test-cases-main/examples/test_case_1 --cycles 3 --json
+python3 -m group9_network_scheduling compare group9_network_scheduling/test_cases/test_case_1 --cycles 3
