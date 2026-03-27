@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import csv
 import json
 from pathlib import Path
 
@@ -44,6 +45,15 @@ def main(argv: list[str] | None = None) -> int:
     compare_parser.add_argument("case_directory", type=Path)
     compare_parser.add_argument("--cycles", type=int, default=5)
     compare_parser.add_argument("--json", action="store_true", dest="as_json")
+    compare_parser.add_argument("--csv", dest="csv_path", type=Path)
+
+    compare_all_parser = subparsers.add_parser(
+        "compare-all-local",
+        help="Run analysis and simulation for all locally stored cases and optionally export one combined CSV.",
+    )
+    compare_all_parser.add_argument("--cycles", type=int, default=5)
+    compare_all_parser.add_argument("--json", action="store_true", dest="as_json")
+    compare_all_parser.add_argument("--csv", dest="csv_path", type=Path)
 
     args = parser.parse_args(argv)
     if args.command == "summarize":
@@ -59,7 +69,14 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "simulate":
         return _simulate_command(case_directory=args.case_directory, cycles=args.cycles, as_json=args.as_json)
     if args.command == "compare":
-        return _compare_command(case_directory=args.case_directory, cycles=args.cycles, as_json=args.as_json)
+        return _compare_command(
+            case_directory=args.case_directory,
+            cycles=args.cycles,
+            as_json=args.as_json,
+            csv_path=args.csv_path,
+        )
+    if args.command == "compare-all-local":
+        return _compare_all_local_command(cycles=args.cycles, as_json=args.as_json, csv_path=args.csv_path)
 
     parser.print_help()
     return 1
@@ -161,52 +178,56 @@ def _simulate_command(case_directory: Path, cycles: int, as_json: bool) -> int:
     return 0
 
 
-def _compare_command(case_directory: Path, cycles: int, as_json: bool) -> int:
+def _compare_command(case_directory: Path, cycles: int, as_json: bool, csv_path: Path | None) -> int:
+    payload = _build_compare_payload(case_directory=case_directory, cycles=cycles)
+    if csv_path is not None:
+        _write_compare_csv(csv_path, payload["streams"])
     case = load_case(case_directory)
-    analysis = analyze_case(case)
-    simulation = simulate_case(case, cycles=cycles)
-    reference = load_reference_wcrts(case_directory)
-
-    rows = []
-    for stream in case.streams:
-        analysis_row = analysis.by_stream_id[stream.stream_id]
-        simulation_row = simulation.by_stream_id[stream.stream_id]
-        analytical_pure = analysis_row.pure_wcd_us
-        observed_pure = simulation_row.observed_pure_wcd_us
-        reference_pure = reference.get(stream.stream_id)
-        rows.append(
-            {
-                "stream_id": stream.stream_id,
-                "queue_class": stream.queue_class.value,
-                "analytical_supported": analysis_row.supported,
-                "analysis_reason": analysis_row.reason,
-                "analytical_pure_wcd_us": analytical_pure,
-                "analytical_delivery_wcd_us": analysis_row.delivery_wcd_us,
-                "observed_pure_wcd_us": observed_pure,
-                "observed_delivery_wcd_us": simulation_row.observed_delivery_wcd_us,
-                "frame_instances": simulation_row.frame_instances,
-                "reference_wcrt_us": reference_pure,
-                "simulation_minus_analysis_us": None if analytical_pure is None else observed_pure - analytical_pure,
-                "analysis_minus_reference_us": None if reference_pure is None or analytical_pure is None else analytical_pure - reference_pure,
-            }
-        )
-
-    payload = {
-        "case_directory": str(case_directory),
-        "cycles": cycles,
-        "streams": rows,
-    }
     if as_json:
         print(json.dumps(payload, indent=2, sort_keys=True))
         return 0
 
     _print_stream_table(
         title=f"Analysis vs simulation for {case_directory}",
-        stream_rows=rows,
+        stream_rows=payload["streams"],
         value_key="analytical_pure_wcd_us",
         secondary_key="observed_pure_wcd_us",
         tertiary_key="reference_wcrt_us",
     )
+    if csv_path is not None:
+        print(f"CSV exported to: {csv_path}")
+    return 0
+
+
+def _compare_all_local_command(cycles: int, as_json: bool, csv_path: Path | None) -> int:
+    case_paths = list_local_cases()
+    payload = {
+        "cycles": cycles,
+        "case_count": len(case_paths),
+        "cases": [_build_compare_payload(case_directory=case_path, cycles=cycles) for case_path in case_paths],
+    }
+    if csv_path is not None:
+        combined_rows = [
+            row
+            for case_payload in payload["cases"]
+            for row in case_payload["streams"]
+        ]
+        _write_compare_csv(csv_path, combined_rows)
+    if as_json:
+        print(json.dumps(payload, indent=2, sort_keys=True))
+        return 0
+
+    print(f"Compared {len(case_paths)} local case(s)")
+    for case_payload in payload["cases"]:
+        _print_stream_table(
+            title=f"Analysis vs simulation for {case_payload['case_directory']}",
+            stream_rows=case_payload["streams"],
+            value_key="analytical_pure_wcd_us",
+            secondary_key="observed_pure_wcd_us",
+            tertiary_key="reference_wcrt_us",
+        )
+    if csv_path is not None:
+        print(f"Combined CSV exported to: {csv_path}")
     return 0
 
 
@@ -242,6 +263,71 @@ def _build_simulation_payload(case_directory: Path, simulation) -> dict:
             for stream_id, stream_simulation in sorted(simulation.by_stream_id.items())
         ],
     }
+
+
+def _build_compare_payload(case_directory: Path, cycles: int) -> dict:
+    case = load_case(case_directory)
+    analysis = analyze_case(case)
+    simulation = simulate_case(case, cycles=cycles)
+    reference = load_reference_wcrts(case_directory)
+
+    rows = []
+    case_name = Path(case_directory).name
+    for stream in case.streams:
+        analysis_row = analysis.by_stream_id[stream.stream_id]
+        simulation_row = simulation.by_stream_id[stream.stream_id]
+        analytical_pure = analysis_row.pure_wcd_us
+        observed_pure = simulation_row.observed_pure_wcd_us
+        reference_pure = reference.get(stream.stream_id)
+        rows.append(
+            {
+                "case_name": case_name,
+                "case_directory": str(case_directory),
+                "cycles": cycles,
+                "stream_id": stream.stream_id,
+                "queue_class": stream.queue_class.value,
+                "analytical_supported": analysis_row.supported,
+                "analysis_reason": analysis_row.reason,
+                "analytical_pure_wcd_us": analytical_pure,
+                "analytical_delivery_wcd_us": analysis_row.delivery_wcd_us,
+                "observed_pure_wcd_us": observed_pure,
+                "observed_delivery_wcd_us": simulation_row.observed_delivery_wcd_us,
+                "frame_instances": simulation_row.frame_instances,
+                "reference_wcrt_us": reference_pure,
+                "simulation_minus_analysis_us": None if analytical_pure is None else observed_pure - analytical_pure,
+                "analysis_minus_reference_us": None if reference_pure is None or analytical_pure is None else analytical_pure - reference_pure,
+            }
+        )
+    return {
+        "case_directory": str(case_directory),
+        "cycles": cycles,
+        "streams": rows,
+    }
+
+
+def _write_compare_csv(csv_path: Path, rows: list[dict]) -> None:
+    csv_path.parent.mkdir(parents=True, exist_ok=True)
+    fieldnames = [
+        "case_name",
+        "case_directory",
+        "cycles",
+        "stream_id",
+        "queue_class",
+        "analytical_supported",
+        "analysis_reason",
+        "analytical_pure_wcd_us",
+        "analytical_delivery_wcd_us",
+        "observed_pure_wcd_us",
+        "observed_delivery_wcd_us",
+        "frame_instances",
+        "reference_wcrt_us",
+        "simulation_minus_analysis_us",
+        "analysis_minus_reference_us",
+    ]
+    with csv_path.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerows(rows)
 
 
 def _print_stream_table(

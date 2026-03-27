@@ -5,6 +5,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import csv
 from pathlib import Path
 
 from group9_network_scheduling import (
@@ -128,6 +129,56 @@ class LoaderTests(unittest.TestCase):
         first_stream = next(row for row in payload["streams"] if row["stream_id"] == 0)
         self.assertAlmostEqual(first_stream["analytical_pure_wcd_us"], 603.2, places=2)
         self.assertAlmostEqual(first_stream["reference_wcrt_us"], 603.2, places=2)
+
+    def test_compare_cli_exports_csv(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            csv_path = Path(temp_dir) / "single_case.csv"
+            subprocess.run(
+                [
+                    sys.executable,
+                    "-m",
+                    "group9_network_scheduling",
+                    "compare",
+                    str(EXAMPLES_ROOT / "test_case_1"),
+                    "--cycles",
+                    "3",
+                    "--csv",
+                    str(csv_path),
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+                cwd=PROJECT_ROOT,
+            )
+            with csv_path.open("r", encoding="utf-8", newline="") as handle:
+                rows = list(csv.DictReader(handle))
+            self.assertEqual(len(rows), 10)
+            self.assertEqual(rows[0]["case_name"], "test_case_1")
+            self.assertEqual(rows[0]["stream_id"], "0")
+
+    def test_compare_all_local_exports_combined_csv(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            csv_path = Path(temp_dir) / "combined.csv"
+            subprocess.run(
+                [
+                    sys.executable,
+                    "-m",
+                    "group9_network_scheduling",
+                    "compare-all-local",
+                    "--cycles",
+                    "2",
+                    "--csv",
+                    str(csv_path),
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+                cwd=PROJECT_ROOT,
+            )
+            with csv_path.open("r", encoding="utf-8", newline="") as handle:
+                rows = list(csv.DictReader(handle))
+            self.assertGreaterEqual(len(rows), 30)
+            self.assertEqual(sorted({row["case_name"] for row in rows}), ["test_case_1", "test_case_2", "test_case_3"])
 
 
 if __name__ == "__main__":

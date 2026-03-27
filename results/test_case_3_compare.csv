@@ -1,0 +1,11 @@
+case_name,case_directory,cycles,stream_id,queue_class,analytical_supported,analysis_reason,analytical_pure_wcd_us,analytical_delivery_wcd_us,observed_pure_wcd_us,observed_delivery_wcd_us,frame_instances,reference_wcrt_us,simulation_minus_analysis_us,analysis_minus_reference_us
+test_case_3,group9_network_scheduling/test_cases/test_case_3,5,0,A,True,,684.0,690.586,181.5620000000008,185.7860000000008,10,,-502.4379999999992,
+test_case_3,group9_network_scheduling/test_cases/test_case_3,5,1,A,True,,684.0,690.586,183.4240000000009,185.78600000000088,10,,-500.5759999999991,
+test_case_3,group9_network_scheduling/test_cases/test_case_3,5,2,A,True,,686.72,693.306,436.78400000000147,439.1460000000015,10,,-249.93599999999856,
+test_case_3,group9_network_scheduling/test_cases/test_case_3,5,3,A,True,,686.72,693.306,434.9220000000014,439.1460000000014,10,,-251.79799999999864,
+test_case_3,group9_network_scheduling/test_cases/test_case_3,5,4,B,True,,844.0,850.586,243.02400000000125,245.38600000000125,5,,-600.9759999999987,
+test_case_3,group9_network_scheduling/test_cases/test_case_3,5,5,B,True,,844.0,850.586,241.16200000000117,245.38600000000116,5,,-602.8379999999988,
+test_case_3,group9_network_scheduling/test_cases/test_case_3,5,6,B,True,,811.36,817.946,346.6820000000016,350.9060000000016,5,,-464.6779999999984,
+test_case_3,group9_network_scheduling/test_cases/test_case_3,5,7,B,True,,811.36,817.946,348.5440000000017,350.9060000000017,5,,-462.8159999999983,
+test_case_3,group9_network_scheduling/test_cases/test_case_3,5,8,BE,False,Analytical CBS bound is implemented for AVB classes A and B only.,,,495.40200000000095,499.62600000000094,10,,,
+test_case_3,group9_network_scheduling/test_cases/test_case_3,5,9,BE,False,Analytical CBS bound is implemented for AVB classes A and B only.,,,497.26400000000103,499.62600000000106,10,,,
