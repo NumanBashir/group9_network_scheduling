@@ -10,12 +10,15 @@ from pathlib import Path
 
 from group9_network_scheduling import (
     LOCAL_TEST_CASES_ROOT,
+    MP2_CASES_ROOT,
     QueueClass,
     analyze_case,
     import_case,
     load_case,
     load_reference_wcrts,
+    prepare_mp2_case,
     simulate_case,
+    validate_mp2_case,
 )
 
 
@@ -179,6 +182,60 @@ class LoaderTests(unittest.TestCase):
                 rows = list(csv.DictReader(handle))
             self.assertGreaterEqual(len(rows), 30)
             self.assertEqual(sorted({row["case_name"] for row in rows}), ["test_case_1", "test_case_2", "test_case_3"])
+
+    def test_prepare_mp2_case_enforces_single_direction_and_100mbps(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            prepared = prepare_mp2_case(
+                EXAMPLES_ROOT / "test_case_1",
+                destination_root=Path(temp_dir),
+                route_group_index=0,
+                case_name="mp2_case",
+            )
+            issues = validate_mp2_case(prepared)
+            self.assertEqual(issues, [])
+
+            case = load_case(prepared)
+            self.assertEqual(len(case.route_groups), 1)
+            self.assertEqual({stream.source for stream in case.streams}, {"ES0"})
+            self.assertEqual({stream.destination for stream in case.streams}, {"ES1"})
+            self.assertEqual({link.bandwidth_mbps for link in case.links}, {100.0})
+
+    def test_prepare_mp2_case_cli_and_validate_cli(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            prepared_path = Path(temp_dir) / "prepared_case"
+            subprocess.run(
+                [
+                    sys.executable,
+                    "-m",
+                    "group9_network_scheduling",
+                    "prepare-mp2-case",
+                    str(EXAMPLES_ROOT / "test_case_2"),
+                    "--route-group-index",
+                    "1",
+                    "--name",
+                    prepared_path.name,
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+                cwd=PROJECT_ROOT,
+            )
+            created = MP2_CASES_ROOT / prepared_path.name
+            self.assertTrue((created / "topology.json").exists())
+            validated = subprocess.run(
+                [
+                    sys.executable,
+                    "-m",
+                    "group9_network_scheduling",
+                    "validate-mp2-case",
+                    str(created),
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+                cwd=PROJECT_ROOT,
+            )
+            self.assertIn("MP2 validation passed.", validated.stdout)
 
 
 if __name__ == "__main__":

@@ -8,7 +8,16 @@ import json
 from pathlib import Path
 
 from .analysis import analyze_case
-from .case_store import LOCAL_TEST_CASES_ROOT, import_case, import_cases, list_local_cases
+from .case_store import (
+    LOCAL_TEST_CASES_ROOT,
+    MP2_CASES_ROOT,
+    import_case,
+    import_cases,
+    list_local_cases,
+    prepare_all_local_cases_for_mp2,
+    prepare_mp2_case,
+    validate_mp2_case,
+)
 from .loader import load_case
 from .reference import load_reference_wcrts
 from .simulation import simulate_case
@@ -31,6 +40,24 @@ def main(argv: list[str] | None = None) -> int:
     import_cases_parser.add_argument("--pattern", default="test_case_*")
 
     subparsers.add_parser("list-cases", help="List locally stored test cases.")
+    subparsers.add_parser("list-mp2-cases", help="List prepared MP2-compliant local cases.")
+
+    prepare_case_parser = subparsers.add_parser(
+        "prepare-mp2-case",
+        help="Prepare a one-direction, 100 Mb/s MP2-compliant case from a local or imported TSN case.",
+    )
+    prepare_case_parser.add_argument("source_case_directory", type=Path)
+    prepare_case_parser.add_argument("--route-group-index", type=int, default=0)
+    prepare_case_parser.add_argument("--name", dest="case_name")
+
+    prepare_all_parser = subparsers.add_parser(
+        "prepare-all-local-mp2",
+        help="Prepare MP2-compliant cases for all locally stored imported cases.",
+    )
+    prepare_all_parser.add_argument("--route-group-index", type=int, default=0)
+
+    validate_mp2_parser = subparsers.add_parser("validate-mp2-case", help="Validate that a case matches the MP2 assumptions.")
+    validate_mp2_parser.add_argument("case_directory", type=Path)
 
     analyze_parser = subparsers.add_parser("analyze", help="Run the analytical CBS bound on a TSN case.")
     analyze_parser.add_argument("case_directory", type=Path)
@@ -64,6 +91,18 @@ def main(argv: list[str] | None = None) -> int:
         return _import_cases_command(source_root=args.source_root, pattern=args.pattern)
     if args.command == "list-cases":
         return _list_cases_command()
+    if args.command == "list-mp2-cases":
+        return _list_mp2_cases_command()
+    if args.command == "prepare-mp2-case":
+        return _prepare_mp2_case_command(
+            source_case_directory=args.source_case_directory,
+            route_group_index=args.route_group_index,
+            case_name=args.case_name,
+        )
+    if args.command == "prepare-all-local-mp2":
+        return _prepare_all_local_mp2_command(route_group_index=args.route_group_index)
+    if args.command == "validate-mp2-case":
+        return _validate_mp2_case_command(case_directory=args.case_directory)
     if args.command == "analyze":
         return _analyze_command(case_directory=args.case_directory, as_json=args.as_json)
     if args.command == "simulate":
@@ -146,6 +185,50 @@ def _list_cases_command() -> int:
     for case_path in cases:
         print(f"  - {case_path}")
     return 0
+
+
+def _list_mp2_cases_command() -> int:
+    cases = list_local_cases(MP2_CASES_ROOT)
+    print(f"MP2 case store: {MP2_CASES_ROOT}")
+    for case_path in cases:
+        print(f"  - {case_path}")
+    return 0
+
+
+def _prepare_mp2_case_command(source_case_directory: Path, route_group_index: int, case_name: str | None) -> int:
+    target = prepare_mp2_case(
+        source_case_directory=source_case_directory,
+        route_group_index=route_group_index,
+        case_name=case_name,
+    )
+    print(f"Prepared MP2 case at: {target}")
+    issues = validate_mp2_case(target)
+    if issues:
+        print("Validation issues:")
+        for issue in issues:
+            print(f"  - {issue}")
+        return 1
+    print("MP2 validation passed.")
+    return 0
+
+
+def _prepare_all_local_mp2_command(route_group_index: int) -> int:
+    prepared = prepare_all_local_cases_for_mp2(route_group_index=route_group_index)
+    print(f"Prepared {len(prepared)} MP2 case(s) into: {MP2_CASES_ROOT}")
+    for case_path in prepared:
+        print(f"  - {case_path}")
+    return 0
+
+
+def _validate_mp2_case_command(case_directory: Path) -> int:
+    issues = validate_mp2_case(case_directory)
+    if not issues:
+        print("MP2 validation passed.")
+        return 0
+    print("MP2 validation failed:")
+    for issue in issues:
+        print(f"  - {issue}")
+    return 1
 
 
 def _analyze_command(case_directory: Path, as_json: bool) -> int:
