@@ -1,0 +1,8 @@
+python3 -m unittest discover -s group9_network_scheduling/tests -v
+
+
+# Can use test_case_1, 2 or 3
+python3 -m group9_network_scheduling summarize tsn-test-cases-main/examples/test_case_1
+
+python3 -m group9_network_scheduling summarize tsn-test-cases-main/examples/test_case_1 --json
+
